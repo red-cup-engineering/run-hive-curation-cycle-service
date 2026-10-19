@@ -15,6 +15,7 @@ function makeMockFetch({ postAgeSeconds }) {
   const created = new Date(new Date(NOW).getTime() - postAgeSeconds * 1000).toISOString().slice(0, -5);
   return async (input, init) => {
     const body = JSON.parse(init.body);
+    if (body.method === "condenser_api.get_config") return reply({ result: { HIVE_REVERSE_AUCTION_WINDOW_SECONDS_HF25: 0 } });
     if (body.method === "condenser_api.get_dynamic_global_properties") return reply(({ result: { head_block_number: 100000 } }));
     if (body.method === "bridge.get_ranked_posts") {
       return reply(({ result: [{ author: "alice", permlink: "p1", created, category: "hive-167922", pending_payout_value: "0.500 HBD", net_rshares: "5000000", abs_rshares: "5000000", children: 3, author_reputation: "100000000000", json_metadata: "{}", active_votes: ["v1", "v2", "v3", "v4", "v5"].map((voter) => ({ voter, rshares: "1000000" })) }] }));
@@ -42,7 +43,6 @@ function policy(overrides) {
     dustWeight: 100,
     preferredTags: ["proofofbrain"],
     neverVoteAuthors: [],
-    curationWindowSeconds: 300,
     curationWindowToleranceSeconds: 60,
     maxDailyBudgetPercent: 20,
     ...overrides,
@@ -57,9 +57,10 @@ test("runs observe, schedule, and cast in one composed cycle and casts the one i
   const record = await runHiveCurationCycle({
     policy: policy({ journalRoot: root }),
     now: NOW,
-    fetchImpl: makeMockFetch({ postAgeSeconds: 300 }),
+    fetchImpl: makeMockFetch({ postAgeSeconds: 0 }),
     fixtures: { curationPrice: { hbdPerRshare: { num: 1n, den: 10_000_000n }, percentCurationRewards: 5000, votePowerReserveRate: 10 } },
     sign: async () => ({ status: "broadcast", id: "a".repeat(40) }),
+    confirm: async () => [{ node: "https://api.hive.blog" }, { node: "https://api.openhive.network" }],
   });
 
   assert.equal(record.type, "HiveCurationCycleRunRecord");
@@ -76,7 +77,7 @@ test("records the signer refusing a vote (but still schedules it)", async (t) =>
   const record = await runHiveCurationCycle({
     policy: policy({ journalRoot: root }),
     now: NOW,
-    fetchImpl: makeMockFetch({ postAgeSeconds: 300 }),
+    fetchImpl: makeMockFetch({ postAgeSeconds: 0 }),
     fixtures: { curationPrice: { hbdPerRshare: { num: 1n, den: 10_000_000n }, percentCurationRewards: 5000, votePowerReserveRate: 10 } },
     sign: async () => { throw Object.assign(new Error("refused"), { refusal: { status: "refused", datum: "key-unavailable", reason: "no posting key is stored for @emsenn0" } }); },
   });
@@ -85,3 +86,19 @@ test("records the signer refusing a vote (but still schedules it)", async (t) =>
   assert.equal(record.accounts.emsenn0.cast.refused[0].reason, "key-unavailable");
 });
 
+
+test("takes the curation window from the chain's config and refuses when the nodes disagree", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "run-hive-curation-cycle-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const base = makeMockFetch({ postAgeSeconds: 0 });
+  let calls = 0;
+  const disagreeing = async (input, init) => {
+    const body = JSON.parse(init.body);
+    if (body.method === "condenser_api.get_config") return reply({ result: { HIVE_REVERSE_AUCTION_WINDOW_SECONDS_HF25: calls++ === 0 ? 0 : 300 } });
+    return base(input, init);
+  };
+  await assert.rejects(
+    runHiveCurationCycle({ policy: policy({ journalRoot: root }), now: NOW, fetchImpl: disagreeing, fixtures: { curationPrice: { hbdPerRshare: { num: 1n, den: 10_000_000n }, percentCurationRewards: 5000, votePowerReserveRate: 10 } } }),
+    /do not agree on HIVE_REVERSE_AUCTION_WINDOW_SECONDS_HF25/,
+  );
+});

@@ -9,6 +9,24 @@ import { runJavascriptNodeOperation } from "@red-cup-engineering/javascript-node
 const DEFAULT_NODES = Object.freeze(["https://api.hive.blog", "https://api.openhive.network"]);
 
 /**
+ * Reads the chain's reverse auction window (HIVE_REVERSE_AUCTION_WINDOW_SECONDS_HF25) from condenser_api.get_config
+ * on every node and requires them to agree; the cycle holds no literal for it.
+ * @param {readonly string[]} nodes
+ * @param {typeof fetch} fetchImpl
+ * @returns {Promise<number>}
+ */
+async function readReverseAuctionWindowSeconds(nodes, fetchImpl) {
+  const values = [];
+  for (const node of nodes) {
+    const response = await fetchImpl(node, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "condenser_api.get_config", params: [], id: 1 }) });
+    const config = (await response.json()).result;
+    values.push(Number(config?.HIVE_REVERSE_AUCTION_WINDOW_SECONDS_HF25));
+  }
+  if (values.length === 0 || values.some((value) => !Number.isFinite(value) || value !== values[0])) throw new Error(`run-hive-curation-cycle: the nodes do not agree on HIVE_REVERSE_AUCTION_WINDOW_SECONDS_HF25 (${values.join(", ")})`);
+  return values[0];
+}
+
+/**
  * Runs one Hive curation cycle for every policy account.  It only plans from two-node witnessed
  * candidate posts and price data, and only reports a vote as executed once two nodes read back its
  * exact chain operation.  Curation income remains the Hive ledger's later claim-derived fact.
@@ -16,7 +34,7 @@ const DEFAULT_NODES = Object.freeze(["https://api.hive.blog", "https://api.openh
  * @param {object} [request.policy] The curation policy (default: the fleet strategy config's curation block, run for its curation-lane accounts).
  * @param {typeof fetch} [request.fetchImpl] Injectable fetch implementation, for tests.
  * @param {object} [request.fixtures] Literal pre-recorded read results, threaded into the two-node
- *   observation for deterministic replay.
+ *   observation for deterministic replay; `fixtures.config` is the condenser_api.get_config result.
  * @param {Function} [request.sign] Injectable signer submission, forwarded into castSetOfVotes, for tests.
  * @param {Function} [request.confirm] Injectable chain confirmation, forwarded into castSetOfVotes.
  * @param {string} [request.now] An injectable ISO instant, for deterministic replay (default the real current time).
@@ -42,8 +60,12 @@ export async function runHiveCurationCycle(request = {}) {
   const candidatePosts = yieldReadout.candidatePosts;
   const price = yieldReadout.curationPrice ?? undefined;
   const accounts = {};
+  let curationWindowSeconds;
   for (const account of policy.accounts) {
+    // The window is the chain's own constant, read once per cycle.
+    curationWindowSeconds ??= request.fixtures?.config ? Number(request.fixtures.config.HIVE_REVERSE_AUCTION_WINDOW_SECONDS_HF25) : await readReverseAuctionWindowSeconds(nodes, fetchImpl);
     const schedule = scheduleSetOfVotes({
+      curationWindowSeconds,
       yieldReadout,
       account,
       candidatePosts,
@@ -56,7 +78,6 @@ export async function runHiveCurationCycle(request = {}) {
         dustWeight: policy.dustWeight,
         preferredTags: policy.preferredTags,
         neverVoteAuthors: policy.neverVoteAuthors,
-        curationWindowSeconds: policy.curationWindowSeconds,
         curationWindowToleranceSeconds: policy.curationWindowToleranceSeconds,
       },
       now: nowIso,
