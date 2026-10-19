@@ -52,7 +52,6 @@ Input:
     "dustWeight": 100,
     "preferredTags": [],
     "neverVoteAuthors": [],
-    "curationWindowSeconds": 300,
     "curationWindowToleranceSeconds": 60,
     "maxDailyBudgetPercent": 20
   },
@@ -92,8 +91,17 @@ Output:
       }
     ],
     "tags": [],
-    "accounts": {}
+    "accounts": {},
+    "candidatePosts": [],
+    "excludedCandidates": [],
+    "curationPrice": null,
+    "curationPriceWitnesses": []
   },
-  "accounts": {}
+  "accounts": {},
+  "accounting": {
+    "type": "HiveLedgerDerivationRequired",
+    "accounts": [],
+    "reason": "curation income is only settled and booked from chain history at claim_reward_balance"
+  }
 }
 ~~~

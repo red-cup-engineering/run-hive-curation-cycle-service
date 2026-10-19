@@ -24,7 +24,6 @@ const examples = [
         "dustWeight": 100,
         "preferredTags": [],
         "neverVoteAuthors": [],
-        "curationWindowSeconds": 300,
         "curationWindowToleranceSeconds": 60,
         "maxDailyBudgetPercent": 20
       },
@@ -42,11 +41,11 @@ const examples = [
     },
     "output": {
       "type": "HiveCurationCycleRunRecord",
-      "version": 1,
+      "version": 2,
       "runAt": "2026-09-05T00:10:00.000Z",
       "yieldReadout": {
         "type": "TribeCurationYieldObservationRecord",
-        "version": 1,
+        "version": 2,
         "observedAt": "2026-09-05T00:10:00.000Z",
         "witnesses": [
           {
@@ -59,9 +58,18 @@ const examples = [
           }
         ],
         "tags": [],
-        "accounts": {}
+        "accounts": {},
+        "candidatePosts": [],
+        "excludedCandidates": [],
+        "curationPrice": null,
+        "curationPriceWitnesses": []
       },
-      "accounts": {}
+      "accounts": {},
+      "accounting": {
+        "type": "HiveLedgerDerivationRequired",
+        "accounts": [],
+        "reason": "curation income is only settled and booked from chain history at claim_reward_balance"
+      }
     }
   }
 ];
