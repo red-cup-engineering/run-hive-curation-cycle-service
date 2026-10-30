@@ -3,7 +3,6 @@ import { observeTribeCurationYield } from "@red-cup-engineering/observe-tribe-cu
 import { scheduleSetOfVotes } from "@red-cup-engineering/schedule-set-of-votes-service";
 import { castSetOfVotes } from "@red-cup-engineering/cast-set-of-votes-service";
 import { put } from "@red-cup-engineering/semiotic-eavt-services-section/store";
-import { curationPolicy } from "@red-cup-engineering/hive-fleet-operations-service/strategy";
 import { runJavascriptNodeOperation } from "@red-cup-engineering/javascript-node-operation-service";
 
 const DEFAULT_NODES = Object.freeze(["https://api.hive.blog", "https://api.openhive.network"]);
@@ -31,7 +30,7 @@ async function readReverseAuctionWindowSeconds(nodes, fetchImpl) {
  * candidate posts and price data, and only reports a vote as executed once two nodes read back its
  * exact chain operation.  Curation income remains the Hive ledger's later claim-derived fact.
  * @param {object} request
- * @param {object} [request.policy] The curation policy (default: the fleet strategy config's curation block, run for its curation-lane accounts).
+ * @param {object} request.policy The curation policy, including the host's absolute `journalRoot`.
  * @param {typeof fetch} [request.fetchImpl] Injectable fetch implementation, for tests.
  * @param {object} [request.fixtures] Literal pre-recorded read results, threaded into the two-node
  *   observation for deterministic replay; `fixtures.config` is the condenser_api.get_config result.
@@ -41,7 +40,12 @@ async function readReverseAuctionWindowSeconds(nodes, fetchImpl) {
  * @returns {Promise<object>} A HiveCurationCycleRunRecord: {type,version,runAt,yieldReadout,accounts}.
  */
 export async function runHiveCurationCycle(request = {}) {
-  const policy = request.policy ?? curationPolicy();
+  // The policy, including where this host keeps the cycle journal, is data from the caller; the
+  // operation never reads a policy file or chooses a host path itself.
+  const policy = request.policy;
+  if (!policy || typeof policy !== "object") throw new TypeError("run-hive-curation-cycle: request.policy is required");
+  if (typeof policy.journalRoot !== "string" || !policy.journalRoot.startsWith("/"))
+    throw new TypeError("run-hive-curation-cycle: policy.journalRoot must be the host's absolute journal directory");
   const fetchImpl = request.fetchImpl ?? fetch;
   const nowIso = request.now ?? new Date().toISOString();
   const nodes = policy.nodes ?? DEFAULT_NODES;

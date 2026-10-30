@@ -5,6 +5,7 @@
  * house's rules).
  */
 import { operation } from "@red-cup-engineering/computer-system-engine/rpc/operation";
+import { curationPolicy } from "@red-cup-engineering/hive-fleet-operations-service/strategy";
 import { runHiveCurationCycle } from "../scripts/run-hive-curation-cycle.mjs";
 
 export function hiveCurationOperations() {
@@ -15,7 +16,8 @@ export function hiveCurationOperations() {
       reads: ["hive/chain", "hive-engine/tokens"],
       writes: ["hive/votes"],
       effects: { class: "external", replay: "coordinated", coordination: "coordination-required", deterministic: "unmeasured", totality: "unmeasured" },
-      run: () => runHiveCurationCycle({}),
+      // The fleet's founder policy is its data; the journal directory is the host's, from the job input.
+      run: (input) => runHiveCurationCycle({ policy: { ...curationPolicy(), journalRoot: input?.journalRoot } }),
     }),
   ]);
 }
