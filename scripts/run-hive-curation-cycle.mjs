@@ -55,7 +55,7 @@ export async function runHiveCurationCycle(request = {}) {
     hiveEngineNode: policy.hiveEngineNode,
     tags: policy.tags,
     postsPerTag: policy.postsPerTag,
-    accounts: policy.accounts,
+    accounts: activeAccounts,
     now: nowIso,
     fetchImpl,
     fixtures: request.fixtures,
